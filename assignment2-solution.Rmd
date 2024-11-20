@@ -1,0 +1,625 @@
+---
+title: "Solution for MEM Assignment r2"
+date: "`r Sys.Date()`"
+author:
+  - 胡浛
+documentclass: ctexart
+geometry: margin=1.18in # 页面边距
+fontsize: 12pt
+linestretch: 1.5 # 行间距
+keywords:
+  - assignment
+output:
+  rticles::ctex:
+    fig_caption: yes # 显示图表的标题
+    number_sections: no
+    citation_package: natbib
+    toc: no
+---
+
+```{r setup,include = FALSE}
+knitr::opts_chunk$set(echo = FALSE,error = FALSE, warning = FALSE, message = FALSE,
+                      out.width = "100%", split = FALSE, fig.align = "center")
+#load library
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(e1071)
+library(showtext)
+library(kableExtra)
+library(gridExtra)
+library(ggplot2)
+library(readxl)
+
+theme_set(theme(text = element_text(family="sans",size = 10))) #这里family设置成你系统中的中文字体名。
+# 添加中文字体
+font_add("PingFang", "/System/Library/Fonts/PingFang.ttc")  # 根据字体路径调整
+showtext_auto()
+```
+
+## Question #1: BigBangTheory. (Attached Data: BigBangTheory)
+
+```{r}
+# 读取 CSV 文件并转换日期
+bigbang_data <- read_csv(
+  file = "./data/BigBangTheory.csv",
+  skip = 1,
+  col_names = c("air_date", "viewers")
+) %>% 
+  mutate(air_date = mdy(air_date))
+```
+
+```{r }
+cat("a. Minimum Viewers:", min(bigbang_data$viewers), 
+    ", Maximum Viewers:", max(bigbang_data$viewers), "\n")
+
+cat("b. Mean =", mean(bigbang_data$viewers), 
+    ", Median =", median(bigbang_data$viewers), 
+    ", Mode =", names(which.max(table(bigbang_data$viewers))), "\n")
+
+cat("c. Q1 =", quantile(bigbang_data$viewers, 0.25),
+    ", Q2 = ", quantile(bigbang_data$viewers, 0.75), "\n")
+
+cat("d. 从给出的数据没有看出有明显的上升或下降趋势")
+
+```
+
+```{r scatterplot, fig.cap= "viewer观众数变化趋势图", fig.width=8, fig.height=4, dpi=150}
+
+ggplot(bigbang_data,aes(air_date,viewers)) +
+         geom_point() +
+         geom_line(color="blue") +
+  scale_x_date(breaks = bigbang_data$air_date) +
+  theme(axis.text.x = element_text(angle = 90), # 将 x 轴刻度标签旋转 90 度
+        text = element_text(family = "PingFang")) 
+
+```
+
+
+## Question #2: NBAPlayerPts. (Attached Data: NBAPlayerPts)
+
+```{r}
+nba_players <- read_csv(file = "./data/NBAPlayerPts.csv", col_names = TRUE)
+```
+
+a. Show the frequency distribution.
+
+ppg频率直方分布图如下图
+
+```{r fig.width=8, fig.height=4, dpi=150}
+ppg <- nba_players$PPG
+#range(nba_players$PPG)
+breaks <- seq(10, 30, by = 2)
+# 分组 PPG
+ppg_groups <- cut(ppg, breaks, right = FALSE)
+# 计算频率分布
+frequency <- table(ppg_groups)
+print(frequency)
+```
+
+b. Show the relative frequency distribution.
+
+```{r}
+
+# 计算相对频率
+relative_frequency <- prop.table(frequency)
+kable(relative_frequency, 
+      col.names = c("ppg分组", "相对频率(%)"), # 设置列名
+      caption = "ppg相对频率分布表")
+
+```
+
+c. Show the cumulative percent frequency distribution.
+
+```{r}
+
+# 计算累计频率
+cumulative_percent_frequency <- cumsum(relative_frequency) * 100
+kable(cumulative_percent_frequency, 
+      col.names = c("ppg分组", "累计频率(%)"),
+      caption = "ppg累计频率分布表")
+
+```
+
+d. Develop a histogram for the average number of points scored per game.
+
+Histogram of Average Points Per Game as below
+
+```{r}
+
+# 绘制直方图
+hist(ppg, breaks = breaks, right = FALSE, 
+     col = "skyblue", main = "Histogram of Average Points Per Game",
+     xlab = "Points Per Game (PPG)", ylab = "Frequency")
+
+```
+e. Do the data appear to be skewed? Explain.
+
+Skewness=`r skewness(ppg)` > 0, 数据右偏
+
+f. What percentage of the players averaged at least 20 points per game?
+
+场均得分至少为 20 分的球员占比: `r sum(ppg >= 20) / length(ppg) * 100`%.
+
+
+## Question #3:
+
+a. How large was the sample used in this survey?
+b. What is the probability that the point estimate was within ±25 of the population mean?
+
+
+```{r}
+
+se <- 20        # 标准误差
+sigma <- 500    # 总体标准差
+
+# 计算样本量
+n <- (sigma / se)^2
+cat("样本量为:", n, "\n")
+
+margin <- 25
+# 计算 z 值
+z <- margin / se
+# 计算概率
+probability <- pnorm(z) - pnorm(-z)
+cat("样本均值在总体均值 ±25 范围内的概率为:", probability, "\n")
+
+```
+
+
+## Question #4: Young Professional Magazine (Attached Data: Professional)
+
+```{r}
+# 读取 CSV 文件
+prof_data <- read_csv("./data/Professional.csv")
+#str(prof_data)
+# 去除空列、重命名列
+prof_cleaned <- 
+  prof_data[, !grepl("^\\.{3}", names(prof_data))] %>% 
+  rename(
+    age="Age",
+    gender = "Gender",
+    real_estate_purchases = "Real Estate Purchases?",
+    investments = "Value of Investments ($)",
+    transactions_count="Number of Transactions",
+    access_broadband = "Broadband Access?",
+    income = "Household Income ($)",
+    have_childred = "Have Children?"
+  )
+# 转换列为因子
+cols_to_factor <- c("gender", "real_estate_purchases", "access_broadband", "have_childred")
+prof_cleaned[cols_to_factor] <- lapply(prof_cleaned[cols_to_factor], factor)
+#str(prof_cleaned)
+```
+
+a. Develop appropriate descriptive statistics to summarize the data.
+
+```{r}
+summary(prof_cleaned)
+```
+
+
+
+```{r}
+# 定义计算95%置信区间函数
+z_95 <- qnorm(0.975, lower.tail = TRUE)
+fn_z95ci <-function(x) {
+  m <- mean(x, na.rm = TRUE)
+  n <- sum(!is.na(x))
+  s <- sd(x, na.rm = TRUE) / sqrt(n)
+  c(m - z_95 * s, m + z_95 * s)
+}
+```
+
+b. Develop 95% confidence intervals for the mean age and household income of subscribers.
+
+平均年龄95%置信区间为 [`r fn_z95ci(prof_cleaned$age)`], 平均年收入95%的置信区间为 [`r fn_z95ci(prof_cleaned$income)`]。
+
+
+```{r}
+# 定义计算比率的置信区间函数
+fn_z95ci_prop <-function(x,val) {
+  n <- sum(!is.na(x))  # 有效样本量
+  p <- sum(!is.na(x) & x == val) / n # 样本比率
+  s <- sqrt(p*(1-p)/n)
+  c(p - z_95 * s, p + z_95 * s)
+}
+```
+
+
+c. Develop 95% confidence intervals for the proportion of subscribers who have broadband access at home and the proportion of subscribers who have children.
+
+95% confidence intervals for the proportion of subscribers who have broadband access at home is [`r  fn_z95ci_prop(prof_cleaned$access_broadband, val = "Yes")`]; 95% confidence intervals for the proportion of subscribers who have children is [`r fn_z95ci_prop(prof_cleaned$have_childred, val = "Yes")`]
+
+d. Would *Young Professional* be a good advertising outlet for online brokers? Justify your conclusion with statistical data.
+
+Yes. 如下图所示，按金融投资金额占家庭年收入的比值分为5组
+
+1)占总人数80%以上的人Young Professional，金融投资占年收入比值>20%，这部分人群都是潜在的广告客户
+
+2)接近62.4%的人群允许了广告投放
+
+3)每组的平均金融交易次数没有因投资比例而呈现明显的差异，可能是因为缺少专业的 brokers
+
+```{r}
+prof_invest <- select(prof_cleaned, investments, transactions_count, income) %>% 
+  mutate(
+    investment_to_income_ratio = ifelse(
+      !is.na(investments) & !is.na(income),
+      investments / income * 100,
+      NA
+    ),
+    investment_to_income_ratio_group = cut(
+      investment_to_income_ratio,
+      breaks = c(0, 20, 40, 60, 80, Inf), # 分为5组
+      labels = c("0-20", "20-40", "40-60", "60-80", ">80"), # 设置组名
+      include.lowest = TRUE # 包含最小值在第一组
+    )
+  )
+
+prof_invest <- prof_invest %>% 
+  group_by(investment_to_income_ratio_group) %>% 
+  summarise(
+    mean_transactions = mean(transactions_count),
+    count = n()
+  ) %>% 
+  mutate(
+    proportion = count / sum(count)
+  )
+
+# 使用 ggplot 绘制 Investment_Ratio_Group 与 平均交易次数 的条形图
+plot1 <- ggplot(prof_invest, aes(x = investment_to_income_ratio_group, y = mean_transactions)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Investment Ratio Group",
+       y = "Average Number of Transactions") +
+  theme_minimal()
+
+# 绘制条形图显示各分组的比例
+plot2 <- ggplot(prof_invest, aes(x = investment_to_income_ratio_group, y = proportion)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  labs(x = "Investment Ratio Group",
+       y = "Proportion") +
+  scale_y_continuous(labels = scales::percent) +  # 将 y 轴标签显示为百分比
+  theme_minimal()
+
+
+grid.arrange(plot1, plot2, ncol = 2)
+```
+
+e. Would this magazine be a good place to advertise for companies selling educational software and computer games for young children?
+
+Yes. 有小孩的人群占比为53.4%。
+
+```{r}
+
+prof_cleaned %>% 
+  group_by(have_childred) %>% 
+  summarise(
+    count = n(),
+  ) %>% 
+  mutate(
+    prop = count / sum(count) * 100
+  )
+
+```
+
+f. Comment on the types of articles you believe would be of interest to readers of *Young Professional*.
+
+感兴趣的文章类型
+
+1) 财经, 人群中投资比、收入均比较高
+2) 育儿，有小孩的人群超过总人数的50%
+3) 房产，有房产交易的占比44%
+4) 运动，人群中青年人居多
+
+```{r}
+
+prof_cleaned %>% 
+  group_by(real_estate_purchases) %>% 
+  summarise(
+    count = n(),
+  ) %>% 
+  mutate(
+    prop = count / sum(count) * 100
+  )
+
+```
+
+
+## Question #5: Quality Associate, Inc. (Attached Data: Quality)
+
+a. Conduct a hypothesis test for each sample at the .01 level of significance and determine what action, if any, should be taken. Provide the p-value for each test.
+
+the p-value for each test as below
+
+```{r}
+
+quality_data <- read.csv("./data/Quality.csv")
+
+#str(quality_data)
+#View(quality_data)
+
+cal_p <- function(x, miu, sigma){
+  m <- mean(x)
+  n <- length(x)
+  z_stat <- (m - miu) / (sigma/sqrt(n))
+  p_value <- 2 * (1 - pnorm(abs(z_stat)))
+  return(p_value)
+}
+
+#quality_data %>% 
+#  map_dbl(cal_p, miu = 12, sigma = 0.21)
+alpha <- 0.01
+for (col in names(quality_data)) {
+  p_value <- cal_p(quality_data[[col]], miu = 12, sigma = 0.21)
+  action <- ifelse(p_value < alpha, "需要整改", "不需要整改")
+  cat(col, "p值为", p_value, action, "\n")
+}
+
+```
+
+b. compute the standard deviation for each of the four samples. does the assumption of .21 for the population standard deviation appear reasonable?
+
+每个样本的标准差与预估标准差0.21的偏差均小于5%, 可以认为总体的标准差为0.21是比较合理的
+
+```{r}
+cal_deviation <- function(x, es_sd){
+  s <- sd(x)
+  abs(s- es_sd) / es_sd * 100
+}
+
+# 计算每列样本的标准差与0.21的偏差
+std_devs <- sapply(quality_data, 
+                          function(col) cal_deviation(col, es_sd = 0.21))
+print(std_devs)
+
+```
+
+```{r}
+# 定义函数计算控制限
+calculate_control_limits <- function(alpha, mu, sigma, n) {
+  # 参数说明：
+  # alpha: 显著性水平（如 0.01 或 0.05）
+  # mu: 总体均值
+  # sigma: 总体标准差
+  # n: 样本大小
+  
+  # 计算标准误差
+  se <- sigma / sqrt(n)
+  
+  # 查找 z_alpha/2 值
+  z_alpha <- qnorm(1 - alpha / 2)
+  
+  # 计算控制限
+  upper_control_limit <- mu + z_alpha * se
+  lower_control_limit <- mu - z_alpha * se
+  
+  # 返回结果为一个列表
+  return(c(lower_control_limit, upper_control_limit))
+}
+
+calculate_control_limits(alpha = 0.01, mu = 12, sigma = 0.21, n = 30)
+
+```
+
+c. compute limits for the sample mean $\overline x$ around $\mu=12$ such that, as long as a new sample mean is within those limits, the process will be considered to be operating satisfactorily. if $\overline x$ exceeds the upper limit or if $\overline x$ is below the lower limit, corrective action will be taken. these limits are referred to as upper and lower control limits for quality control purposes.
+
+lower and upper control limits is `r calculate_control_limits(alpha = 0.01, mu = 12, sigma = 0.21, n = 30)`
+
+d. discuss the implications of changing the level of significance to a larger value. what mistake or error could increase if the level of significance is increased?
+
+显著性水平增加，允许拒绝原假设的证据要求越低，测试更倾向于拒绝 $H_0$。
+$\alpha$ =0.01调整为$\alpha$=0.05时，对假设检验的要求更宽松,第一类错误增加。
+
+```{r}
+calculate_control_limits(alpha = 0.01, mu = 12, sigma = 0.21, n = 30)
+calculate_control_limits(alpha = 0.05, mu = 12, sigma = 0.21, n = 30)
+```
+
+## Question #6
+
+a. Estimate the proportion of units rented during the first week of March 2007 and the first week of March 2008.
+
+```{r}
+occupancy_data <- read.csv("./data/Occupancy.csv", skip = 1)
+# 转换为因子
+occupancy_data[] <- lapply(occupancy_data, function(col) {
+  factor(col, levels = c("Yes", "No"))
+})
+
+calc_occupancy_prop <- function(data){
+  # 计算每列Yes的比例
+  yes_proportions <- sapply(data, function(col) {
+    sum(col == "Yes", na.rm = TRUE) / sum(!is.na(col))
+  })
+  return(yes_proportions)
+}
+
+yes_proportions <- calc_occupancy_prop(occupancy_data)
+print(yes_proportions)
+```
+
+b. Provide a 95% confidence interval for the difference in proportions.
+
+```{r}
+
+p1 <- yes_proportions[1]
+p2 <- yes_proportions[2]
+
+n1 <- sum(!is.na(occupancy_data$March.2007))
+n2 <- sum(!is.na(occupancy_data$March.2008))
+
+# 差异置信区间计算
+p_diff <- p2 - p1
+se <- sqrt((p1 * (1 - p1) / n1) + (p2 * (1 - p2) / n2))
+z <- 1.96  # 95%置信区间
+ci_lower <- p_diff - z * se
+ci_upper <- p_diff + z * se
+
+cat("出租比例差异的95%置信区间: [", ci_lower, ",", ci_upper, "]\n")
+
+```
+
+c. On the basis of your findings, does it appear March rental rates for 2008 will be up from those a year earlier?
+
+是的。置信区间的下限为正数，说明2008年出租率显著高于2007年。因为在该置信区间内，所有可能的差异值都表明2008年出租率高于2007年
+
+**Question #7**: **Air Force Training Program** (data file: Training)
+
+a. use appropriate descriptive statistics to summarize the training time data for each method. what similarities or differences do you observe from the sample data?
+
+```{r}
+
+training_data <- read.csv("./data/Training.csv")
+#str(training_data)
+
+summary(training_data$Current)
+summary(training_data$Proposed)
+
+```
+
+b. Comment on any difference between the population means for the two methods. Discuss your findings.
+
+```{r}
+
+# t检验比较两种训练方法的均值
+t_test_result <- t.test(training_data$Current, training_data$Proposed)
+t_test_result
+
+```
+
+c. compute the standard deviation and variance for each training method. conduct a hypothesis test about the equality of population variances for the two training methods. Discuss your findings.
+
+```{r}
+
+# 输出方差和标准差
+cat("Method 1 - Variance:", var(training_data$Current), "SD:", sd(training_data$Current), "\n")
+cat("Method 2 - Variance:", var(training_data$Proposed), "SD:", sd(training_data$Proposed), "\n")
+
+# F检验比较方差
+f_test_result <- var.test(training_data$Current, training_data$Proposed)
+f_test_result
+
+```
+
+d. what conclusion can you reach about any differences between the two methods? what is your recommendation? explain.
+
+e. can you suggest other data or testing that might be desirable before making a final decision on the training program to be used in the future?
+
+
+## Q8
+
+a. Develop a scatter diagram with the car mileage on the horizontal axis and the price on the vertical axis.
+
+```{r}
+
+camry_data <- read.csv("./data/Camry.csv", col.names = c("Mileage", "Price"))
+#str(camry_data)
+#View(camry_data)
+
+# 使用 ggplot2 绘制散点图
+ggplot(camry_data, aes(x = Mileage, y = Price)) +
+  geom_point(color = "blue") +  # 设置点的颜色
+  labs(title = "2007 Toyota Camry Mileage vs Price",
+       x = "Mileage (Thousands of miles)",
+       y = "Price (Thousands of dollars)") +
+  theme_minimal()  # 使用简洁的主题
+```
+
+b. what does the scatter diagram developed in part (a) indicate about the relationship between the two variables?
+
+曲线整体是一个向下倾斜的趋势，说明随着里程的增加，价格可能在下降。
+
+c. Develop the estimated regression equation that could be used to predict the price ($1000s) given the miles (1000s).
+
+```{r}
+
+# 执行线性回归
+model <- lm(Price ~ Mileage, data = camry_data)
+
+# 查看回归模型的结果
+summary(model)
+
+# 提取回归方程的截距和斜率
+intercept <- coef(model)[1]
+slope <- coef(model)[2]
+
+# 输出回归方程
+cat("回归方程为：Price = ", intercept, " + ", slope, " * Mileage\n")
+
+# 使用回归方程进行预测（假设给定里程为60,000英里，即60）
+predicted_price <- predict(model, newdata = data.frame(Mileage = 60))
+
+# 输出预测价格
+cat("预测里程为60,000英里的价格为：", predicted_price, "千美元\n")
+
+equation <- paste("Price = ", round(intercept, 2), " + ", round(slope, 2), " * Mileage")
+
+# 创建 ggplot 图形：绘制散点图和回归拟合线，并添加回归方程
+ggplot(camry_data, aes(x = Mileage, y = Price)) +
+  geom_point(color = "blue", size = 3) +  # 散点图，点的颜色为蓝色，大小为3
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "solid", size = 1) +  # 添加回归拟合曲线（红色实线）
+  labs(title = "2007 Toyota Camry Mileage vs Price with Fitted Line",  # 标题
+       x = "Mileage (Thousands of miles)",  # x轴标签
+       y = "Price (Thousands of dollars)") +  # y轴标签
+  annotate("text", x = 40, y = 15, label = equation, color = "black", size = 2, hjust = 0) +  # 添加回归方程式
+  theme_minimal()  # 使用简洁的主题
+
+```
+
+d. Test for a significant relationship at the .05 level of significance.
+
+斜率（Mileage）的 p 值为 0.0003，远小于0.05，说明我们拒绝零假设，即里程与价格之间存在显著的负相关关系
+
+```{r}
+
+# 执行线性回归分析
+model <- lm(Price ~ Mileage, data = camry_data)
+
+# 输出回归分析的结果
+summary(model)
+
+```
+
+e. Did the estimated regression equation provide a good fit? Explain.
+
+```{r}
+
+# 计算 R-squared 值
+r_squared <- summary(model)$r.squared
+cat("R-squared:", r_squared, "\n")
+
+# 计算 F 统计量和 p 值
+# 如果 F 统计量的 p 值小于 0.05，表示回归模型显著，能够有效地解释数据的变异。
+
+f_statistic <- summary(model)$fstatistic[1]
+f_p_value <- pf(f_statistic, df1 = 1, df2 = nrow(camry_data) - 2, lower.tail = FALSE)
+cat("F-statistic:", f_statistic, "\n")
+cat("F p-value:", f_p_value, "\n")
+
+# 绘制残差图
+# 如果残差图中的点分布没有明显的模式，说明模型的拟合较好。
+plot(model$residuals, main = "Residuals Plot", xlab = "Index", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)  # 添加水平线，表示零残差
+
+```
+
+f. Provide an interpretation for the slope of the estimated regression equation.
+
+这意味着每行驶1000英里，汽车的价值下降大约60美元。
+
+g. Suppose that you are considering purchasing a previously owned 2007 Camry that has been driven 60,000 miles. Using the estimated regression equation developed in part (c), predict the price for this car. Is this the price you would offer the seller.
+
+使用回归方程预测价格为12.94千美元。
+
+## Q9
+
+
+a. 通过可视化探索流失客户与非流失客户的行为特点（或特点对比），你能发现流失与非流失客户行为在哪些指标有可能存在显著不同？
+
+b. 通过均值比较的方式验证上述不同是否显著。
+
+c. 以”流失“为因变量，其他你认为重要的变量为自变量（提示：a、b两步的发现），建立回归方程对是否流失进行预测。
+
+d. 根据上一步预测的结果，对尚未流失（流失=0）的客户进行流失可能性排序，并给出流失可能性最大的前100名用户ID列表。
+
