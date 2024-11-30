@@ -31,7 +31,7 @@ library(gridExtra)
 library(ggplot2)
 library(readxl)
 
-theme_set(theme(text = element_text(family="sans",size = 10))) #这里family设置成你系统中的中文字体名。
+theme_set(theme(text = element_text(family="sans",size = 10)))
 # 添加中文字体
 font_add("PingFang", "/System/Library/Fonts/PingFang.ttc")  # 根据字体路径调整
 showtext_auto()
@@ -60,11 +60,16 @@ cat("b. Mean =", mean(bigbang_data$viewers),
 cat("c. Q1 =", quantile(bigbang_data$viewers, 0.25),
     ", Q2 = ", quantile(bigbang_data$viewers, 0.75), "\n")
 
-cat("d. 从给出的数据没有看出有明显的上升或下降趋势")
+
+bigbang_model <- lm(bigbang_data$viewers ~ bigbang_data$air_date)
+bigbang_model_summary <- summary(bigbang_model)
+p_value <- bigbang_model_summary$coefficients[2,4]
+
+cat("d. p值>0.05, 回归系数不显著，从给出的数据没有看出有明显的上升或下降趋势")
 
 ```
 
-```{r scatterplot, fig.cap= "viewer观众数变化趋势图", fig.width=8, fig.height=4, dpi=150}
+```{r scatterplot, fig.cap= "viewer观众数变化趋势图", fig.width=8, fig.height=3, dpi=150}
 
 ggplot(bigbang_data,aes(air_date,viewers)) +
          geom_point() +
@@ -464,7 +469,7 @@ c. On the basis of your findings, does it appear March rental rates for 2008 wil
 
 是的。置信区间的下限为正数，说明2008年出租率显著高于2007年。因为在该置信区间内，所有可能的差异值都表明2008年出租率高于2007年
 
-**Question #7**: **Air Force Training Program** (data file: Training)
+## Question #7: Air Force Training Program (data file: Training)
 
 a. use appropriate descriptive statistics to summarize the training time data for each method. what similarities or differences do you observe from the sample data?
 
@@ -473,8 +478,9 @@ a. use appropriate descriptive statistics to summarize the training time data fo
 training_data <- read.csv("./data/Training.csv")
 #str(training_data)
 
-summary(training_data$Current)
-summary(training_data$Proposed)
+skimr::skim(training_data) %>% 
+  kable() %>% 
+  kable_styling(position = "center", bootstrap_options = c("striped", "hover"), latex_options = c("scale_down"), font_size = 6)
 
 ```
 
@@ -482,10 +488,16 @@ b. Comment on any difference between the population means for the two methods. D
 
 ```{r}
 
-# t检验比较两种训练方法的均值
-t_test_result <- t.test(training_data$Current, training_data$Proposed)
-t_test_result
+current <- training_data$Current
+proposed <- training_data$Proposed
 
+mean(current)
+mean(proposed)
+
+# t检验比较两种训练方法的均值
+t_test_result <- t.test(current, proposed)
+# p-value=0.55,大于0.05,说明current和proposed的总体均值之间没有显著差异
+t_test_result
 ```
 
 c. compute the standard deviation and variance for each training method. conduct a hypothesis test about the equality of population variances for the two training methods. Discuss your findings.
@@ -493,18 +505,25 @@ c. compute the standard deviation and variance for each training method. conduct
 ```{r}
 
 # 输出方差和标准差
-cat("Method 1 - Variance:", var(training_data$Current), "SD:", sd(training_data$Current), "\n")
-cat("Method 2 - Variance:", var(training_data$Proposed), "SD:", sd(training_data$Proposed), "\n")
+cat("Method 1 - Variance:", var(current), "SD:", sd(current), "\n")
+cat("Method 2 - Variance:", var(proposed), "SD:", sd(proposed), "\n")
 
 # F检验比较方差
-f_test_result <- var.test(training_data$Current, training_data$Proposed)
+f_test_result <- var.test(current, proposed)
 f_test_result
 
 ```
 
+Current和Proposed的方差存在显著差异，Proposed的方差更小。
+
 d. what conclusion can you reach about any differences between the two methods? what is your recommendation? explain.
 
+学习通过两种方式培训的时长均值不存在显著差异，但Proposed的方差更小，说明时长分布相对密集，为了减少其他同学的等待时长，选择Proposed的方式更佳。
+
+
 e. can you suggest other data or testing that might be desirable before making a final decision on the training program to be used in the future?
+
+为了做出全面的决策，除了培训时长外，还需要考虑培训后的效果，完成培训后，记录每个学生在培训后的表现，分析两组的培训效果是否存在差异。
 
 
 ## Q8
@@ -777,7 +796,7 @@ we_data %>%
   arrange(desc(predicted_prob)) %>% 
   select(customer_id, predicted_prob) %>% 
   slice_head(n = 10) %>% # 表格太长，这里只打印出前10
-  kable(caption = "流失可能性最大的前100名用户ID列表") %>% 
+  kable(caption = "流失可能性最大的前10名用户ID列表") %>% 
   kable_styling()
 ```
 
